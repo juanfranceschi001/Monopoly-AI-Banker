@@ -1,0 +1,7 @@
+{
+  "name": "Monopoly AI Banker",
+  "description": "A high-tech Monopoly companion that uses AI to scan money and properties from photos, tracks player balances, and manages property holdings for a faster game experience.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
