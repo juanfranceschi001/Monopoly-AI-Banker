@@ -8,6 +8,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
+import android.view.ViewGroup;
 import android.webkit.PermissionRequest;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -47,10 +48,18 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        AdView adView = findViewById(R.id.adView);
+        // Built entirely in code, not declared in XML: the SDK's XML-inflation
+        // constructor checks for the "adSize" attribute at inflation time --
+        // before this method runs -- and renders a debug error view in its
+        // place if it's absent, even though setAdSize() below is called
+        // before loadAd(). Constructing programmatically avoids that check.
+        AdView adView = new AdView(this);
         adView.setAdSize(AdSize.BANNER);
         adView.setAdUnitId(BuildConfig.ADMOB_BANNER_AD_UNIT_ID);
         adView.loadAd(new AdRequest.Builder().build());
+        ViewGroup adContainer = findViewById(R.id.adContainer);
+        adContainer.addView(adView, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         WebView webView = findViewById(R.id.webView);
         WebSettings settings = webView.getSettings();
