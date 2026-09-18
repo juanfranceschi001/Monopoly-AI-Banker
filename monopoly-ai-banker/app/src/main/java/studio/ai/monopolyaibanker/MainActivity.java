@@ -20,6 +20,7 @@ import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
 
 import com.google.android.gms.ads.AdRequest;
+import com.google.android.gms.ads.AdSize;
 import com.google.android.gms.ads.AdView;
 
 import java.io.File;
@@ -47,6 +48,7 @@ public class MainActivity extends Activity {
         setContentView(R.layout.activity_main);
 
         AdView adView = findViewById(R.id.adView);
+        adView.setAdSize(AdSize.BANNER);
         adView.setAdUnitId(BuildConfig.ADMOB_BANNER_AD_UNIT_ID);
         adView.loadAd(new AdRequest.Builder().build());
 
