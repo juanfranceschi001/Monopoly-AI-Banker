@@ -1,0 +1,12 @@
+name = "monopoly-ai-banker-proxy"
+main = "src/index.ts"
+compatibility_date = "2026-09-17"
+
+# Burst-abuse guard (20 requests/60s per IP) -- see README.md. namespace_id
+# is just an arbitrary integer identifying this binding, not a provisioned
+# resource like a KV namespace.
+[[unsafe.bindings]]
+name = "RATE_LIMITER"
+type = "ratelimit"
+namespace_id = "1001"
+simple = { limit = 20, period = 60 }

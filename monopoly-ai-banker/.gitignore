@@ -11,6 +11,30 @@ node_modules
 dist
 dist-ssr
 *.local
+.env
+
+# Cloudflare Worker
+worker/node_modules/
+worker/.wrangler/
+worker/.dev.vars
+
+# Android signing / build artifacts -- never commit these
+android.keystore
+*.jks
+*.keystore
+local.properties
+key.properties
+admob.properties
+*.apk
+*.apk.idsig
+*.aab
+app/build/
+build/
+.gradle/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
 
 # Editor directories and files
 .vscode/*
