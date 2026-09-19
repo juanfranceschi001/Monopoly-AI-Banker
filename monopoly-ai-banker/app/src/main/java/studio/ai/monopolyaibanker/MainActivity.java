@@ -8,7 +8,9 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
+import android.util.Log;
 import android.view.ViewGroup;
+import android.webkit.ConsoleMessage;
 import android.webkit.PermissionRequest;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -41,7 +43,7 @@ public class MainActivity extends Activity {
     private static final int REQUEST_FILE_CHOOSER = 200;
 
     private ValueCallback<Uri[]> filePathCallback;
-    private String cameraPhotoPath;
+    private Uri cameraPhotoUri;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -85,6 +87,16 @@ public class MainActivity extends Activity {
                 // trust level for content the app itself loads).
                 request.grant(request.getResources());
             }
+
+            @Override
+            public boolean onConsoleMessage(ConsoleMessage message) {
+                Log.println(
+                        message.messageLevel() == ConsoleMessage.MessageLevel.ERROR
+                                ? Log.ERROR : Log.DEBUG,
+                        "MonopolyWebView",
+                        message.message() + " (" + message.sourceId() + ":" + message.lineNumber() + ")");
+                return true;
+            }
         });
 
         webView.loadUrl(BuildConfig.WEB_APP_URL);
@@ -105,11 +117,11 @@ public class MainActivity extends Activity {
         if (takePictureIntent.resolveActivity(getPackageManager()) != null) {
             File photoFile = createImageFile();
             if (photoFile != null) {
-                cameraPhotoPath = photoFile.getAbsolutePath();
-                Uri photoUri = FileProvider.getUriForFile(this,
+                cameraPhotoUri = FileProvider.getUriForFile(this,
                         "studio.ai.monopolyaibanker.fileprovider", photoFile);
-                takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, photoUri);
-                takePictureIntent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, cameraPhotoUri);
+                takePictureIntent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                        | Intent.FLAG_GRANT_READ_URI_PERMISSION);
             } else {
                 takePictureIntent = null;
             }
@@ -118,6 +130,7 @@ public class MainActivity extends Activity {
         Intent contentSelectionIntent = new Intent(Intent.ACTION_GET_CONTENT);
         contentSelectionIntent.addCategory(Intent.CATEGORY_OPENABLE);
         contentSelectionIntent.setType("image/*");
+        contentSelectionIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
 
         Intent chooserIntent = Intent.createChooser(contentSelectionIntent, "Scan photo");
         if (takePictureIntent != null) {
@@ -157,13 +170,17 @@ public class MainActivity extends Activity {
         if (resultCode == Activity.RESULT_OK) {
             if (data != null && data.getData() != null) {
                 results = new Uri[]{data.getData()};
-            } else if (cameraPhotoPath != null) {
-                results = new Uri[]{Uri.fromFile(new File(cameraPhotoPath))};
+            } else if (cameraPhotoUri != null) {
+                // Reuse the same content:// FileProvider URI the camera wrote
+                // to -- a raw file:// URI (Uri.fromFile) is blocked when
+                // handed to WebView's separate renderer process on API 24+
+                // and silently yields an empty file list on the JS side.
+                results = new Uri[]{cameraPhotoUri};
             }
         }
         filePathCallback.onReceiveValue(results);
         filePathCallback = null;
-        cameraPhotoPath = null;
+        cameraPhotoUri = null;
     }
 
     @Override

@@ -16,28 +16,33 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete, onClose }) => {
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file) return;
+    if (!file) {
+      console.warn("Scanner: no file returned from the picker/camera.");
+      setError("No photo was selected. Please try again.");
+      return;
+    }
 
     setLoading(true);
     setError(null);
 
-    try {
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        const base64String = (reader.result as string).split(',')[1];
-        try {
-          const result = await analyzeMonopolyImage(base64String);
-          onScanComplete(result);
-        } catch (e) {
-          setError("Failed to analyze image. Please try again with a clearer photo.");
-          setLoading(false);
-        }
-      };
-      reader.readAsDataURL(file);
-    } catch (e) {
-      setError("Error reading file.");
+    const reader = new FileReader();
+    reader.onerror = () => {
+      console.error("Scanner: FileReader failed to read the selected photo.", reader.error);
+      setError("Could not read that photo. Please try again.");
       setLoading(false);
-    }
+    };
+    reader.onloadend = async () => {
+      try {
+        const base64String = (reader.result as string).split(',')[1];
+        const result = await analyzeMonopolyImage(base64String);
+        onScanComplete(result);
+      } catch (e) {
+        console.error("Scanner: analysis failed.", e);
+        setError("Failed to analyze image. Please try again with a clearer photo.");
+        setLoading(false);
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   return (
