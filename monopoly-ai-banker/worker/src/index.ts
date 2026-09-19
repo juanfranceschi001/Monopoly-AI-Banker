@@ -18,11 +18,22 @@ export interface Env {
   GEMINI_API_KEY: string;
 }
 
-// gemini-3-flash-preview showed capacity 503s under test; gemini-2.5-flash
-// is sunset for new API keys as of this writing (404 "no longer available
-// to new users"). gemini-3.6-flash is Google's own recommended replacement.
-const GEMINI_MODEL = "gemini-3.6-flash";
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+// Gemini's flash models occasionally return a transient 503 "high demand"
+// error. Rather than retrying the same overloaded model, fall through an
+// ordered list of models spanning different generations/tiers -- each is a
+// separate capacity pool, so one being busy doesn't mean the others are.
+// All confirmed working against this API key via a live test call before
+// being added here. gemini-2.5-flash and gemini-2.5-flash-lite are
+// confirmed dead (404 "no longer available to new users").
+const GEMINI_MODELS = [
+  "gemini-3.6-flash",
+  "gemini-flash-lite-latest",
+  "gemini-3.8-flash",
+  "gemini-3.5-flash",
+];
+
+const RETRYABLE_STATUS = new Set([503, 429]);
+const FULL_CHAIN_RETRY_DELAY_MS = 2000;
 
 const PROMPT = `Analyze this photo of Monopoly game assets. Identify:
 1. The denominations of the Monopoly money shown and how many of each (e.g., $1, $5, $10, $20, $50, $100, $500).
@@ -58,6 +69,51 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "content-type",
 };
+
+interface AttemptResult {
+  ok: boolean;
+  status: number;
+  text: string;
+}
+
+async function callModel(model: string, image: string, apiKey: string): Promise<AttemptResult> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+  const upstream = await fetch(`${url}?key=${apiKey}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      contents: [
+        {
+          parts: [
+            { inlineData: { mimeType: "image/jpeg", data: image } },
+            { text: PROMPT },
+          ],
+        },
+      ],
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema: RESPONSE_SCHEMA,
+      },
+    }),
+  });
+  const text = await upstream.text();
+  return { ok: upstream.ok, status: upstream.status, text };
+}
+
+/** Tries each model in order, moving on only from capacity-related (503/429) failures. */
+async function callWithFallback(image: string, apiKey: string): Promise<AttemptResult> {
+  let lastResult: AttemptResult | null = null;
+  for (const model of GEMINI_MODELS) {
+    const result = await callModel(model, image, apiKey);
+    if (result.ok) return result;
+    console.error(`Gemini ${model} error ${result.status}: ${result.text}`);
+    lastResult = result;
+    if (!RETRYABLE_STATUS.has(result.status)) {
+      return result; // Not a capacity issue -- retrying elsewhere won't help.
+    }
+  }
+  return lastResult!;
+}
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -99,35 +155,23 @@ export default {
 
     console.log(`analyze request: base64 length=${image.length}`);
 
-    const upstream = await fetch(`${GEMINI_URL}?key=${env.GEMINI_API_KEY}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              { inlineData: { mimeType: "image/jpeg", data: image } },
-              { text: PROMPT },
-            ],
-          },
-        ],
-        generationConfig: {
-          responseMimeType: "application/json",
-          responseSchema: RESPONSE_SCHEMA,
-        },
-      }),
-    });
+    let result = await callWithFallback(image, env.GEMINI_API_KEY);
 
-    if (!upstream.ok) {
-      const errorBody = await upstream.text();
-      console.error(`Gemini upstream error ${upstream.status}: ${errorBody}`);
-      return json({ error: "upstream error", detail: errorBody }, 502);
+    if (!result.ok && RETRYABLE_STATUS.has(result.status)) {
+      // Every model in the chain was busy -- worth one full pass again
+      // after a short wait, since these blips are usually brief.
+      await new Promise((resolve) => setTimeout(resolve, FULL_CHAIN_RETRY_DELAY_MS));
+      result = await callWithFallback(image, env.GEMINI_API_KEY);
     }
 
-    const result = await upstream.json<{
+    if (!result.ok) {
+      return json({ error: "upstream error", detail: result.text }, 502);
+    }
+
+    const parsed = JSON.parse(result.text) as {
       candidates?: { content?: { parts?: { text?: string }[] } }[];
-    }>();
-    const resultText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+    };
+    const resultText = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!resultText) {
       return json({ error: "no response from AI" }, 502);
     }
