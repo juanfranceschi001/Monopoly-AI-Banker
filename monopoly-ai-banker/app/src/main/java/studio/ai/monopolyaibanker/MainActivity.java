@@ -45,6 +45,8 @@ public class MainActivity extends Activity {
 
     private ValueCallback<Uri[]> filePathCallback;
     private Uri cameraPhotoUri;
+    private WebView webView;
+    private boolean hasResumedBefore;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -64,7 +66,7 @@ public class MainActivity extends Activity {
         adContainer.addView(adView, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        WebView webView = findViewById(R.id.webView);
+        webView = findViewById(R.id.webView);
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
@@ -225,11 +227,25 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        WebView webView = findViewById(R.id.webView);
         if (webView.canGoBack()) {
             webView.goBack();
         } else {
             super.onBackPressed();
         }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Returning to the app from the background (recent apps, another
+        // app, the launcher) resumes the same Activity/WebView instance --
+        // onCreate() doesn't run again, so the initial loadUrl() is the
+        // only fetch that ever happens otherwise. Reload so a fix shipped
+        // to the hosted site takes effect without the user needing to
+        // force-stop the app first.
+        if (hasResumedBefore) {
+            webView.reload();
+        }
+        hasResumedBefore = true;
     }
 }
