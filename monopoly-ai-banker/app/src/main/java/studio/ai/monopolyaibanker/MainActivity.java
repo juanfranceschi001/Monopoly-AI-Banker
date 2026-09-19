@@ -4,6 +4,7 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
@@ -114,16 +115,25 @@ public class MainActivity extends Activity {
 
     private void startImageChooser() {
         Intent takePictureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+        boolean cameraReady = false;
+        // Note: resolveActivity() requires a <queries> declaration for this
+        // action on Android 11+ (package visibility) -- without it, this
+        // silently returns null even though a camera app is installed and
+        // the system chooser can still launch it, leaving this intent
+        // configured with no EXTRA_OUTPUT.
         if (takePictureIntent.resolveActivity(getPackageManager()) != null) {
             File photoFile = createImageFile();
             if (photoFile != null) {
-                cameraPhotoUri = FileProvider.getUriForFile(this,
-                        "studio.ai.monopolyaibanker.fileprovider", photoFile);
-                takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, cameraPhotoUri);
-                takePictureIntent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                        | Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            } else {
-                takePictureIntent = null;
+                try {
+                    cameraPhotoUri = FileProvider.getUriForFile(this,
+                            "studio.ai.monopolyaibanker.fileprovider", photoFile);
+                    takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, cameraPhotoUri);
+                    takePictureIntent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                            | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    cameraReady = true;
+                } catch (IllegalArgumentException e) {
+                    Log.e("MonopolyFileChooser", "FileProvider.getUriForFile failed for " + photoFile, e);
+                }
             }
         }
 
@@ -133,7 +143,7 @@ public class MainActivity extends Activity {
         contentSelectionIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
 
         Intent chooserIntent = Intent.createChooser(contentSelectionIntent, "Scan photo");
-        if (takePictureIntent != null) {
+        if (cameraReady) {
             chooserIntent.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[]{takePictureIntent});
         }
         startActivityForResult(chooserIntent, REQUEST_FILE_CHOOSER);
@@ -170,17 +180,43 @@ public class MainActivity extends Activity {
         if (resultCode == Activity.RESULT_OK) {
             if (data != null && data.getData() != null) {
                 results = new Uri[]{data.getData()};
+            } else if (data != null && data.getClipData() != null && data.getClipData().getItemCount() > 0) {
+                // Modern pickers (the system Photos picker, many Files apps)
+                // return the selected item via ClipData instead of the
+                // legacy Intent.getData() field.
+                results = new Uri[]{data.getClipData().getItemAt(0).getUri()};
             } else if (cameraPhotoUri != null) {
                 // Reuse the same content:// FileProvider URI the camera wrote
                 // to -- a raw file:// URI (Uri.fromFile) is blocked when
                 // handed to WebView's separate renderer process on API 24+
                 // and silently yields an empty file list on the JS side.
                 results = new Uri[]{cameraPhotoUri};
+            } else if (data != null && data.getExtras() != null && data.getExtras().get("data") instanceof Bitmap) {
+                // Some camera apps ignore EXTRA_OUTPUT and fall back to
+                // returning a low-res thumbnail inline via this legacy
+                // "data" extra. Save it ourselves so there's still a usable
+                // photo instead of nothing.
+                Uri savedUri = saveThumbnailBitmap((Bitmap) data.getExtras().get("data"));
+                if (savedUri != null) {
+                    results = new Uri[]{savedUri};
+                }
             }
         }
         filePathCallback.onReceiveValue(results);
         filePathCallback = null;
         cameraPhotoUri = null;
+    }
+
+    private Uri saveThumbnailBitmap(Bitmap bitmap) {
+        File photoFile = createImageFile();
+        if (photoFile == null) return null;
+        try (java.io.FileOutputStream out = new java.io.FileOutputStream(photoFile)) {
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out);
+        } catch (IOException e) {
+            Log.e("MonopolyFileChooser", "failed to save thumbnail bitmap", e);
+            return null;
+        }
+        return FileProvider.getUriForFile(this, "studio.ai.monopolyaibanker.fileprovider", photoFile);
     }
 
     @Override

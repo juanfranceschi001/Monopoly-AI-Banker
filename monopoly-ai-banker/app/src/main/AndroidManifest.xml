@@ -5,6 +5,17 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
+    <!-- Android 11+ package visibility: without this, PackageManager.
+         resolveActivity() for ACTION_IMAGE_CAPTURE silently returns null
+         even when a camera app is installed, even though the system
+         chooser can still launch it, which caused the camera capture
+         intent to be added with no EXTRA_OUTPUT configured. -->
+    <queries>
+        <intent>
+            <action android:name="android.media.action.IMAGE_CAPTURE" />
+        </intent>
+    </queries>
+
     <application
         android:name=".Application"
         android:allowBackup="true"
