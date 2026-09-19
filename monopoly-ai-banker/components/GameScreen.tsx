@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { DollarSign, Scan, Settings, History, ChevronRight, ArrowRightLeft, X, AlertCircle, Building2, CheckCircle2 } from 'lucide-react';
+import { DollarSign, Scan, Settings, History, ChevronRight, ArrowRightLeft, X, AlertCircle, Building2, CheckCircle2, Trash2, Plus, Minus } from 'lucide-react';
 import { Player, ScanResult } from '../types';
 import Scanner from './Scanner';
 
@@ -24,6 +24,28 @@ const GameScreen: React.FC<GameScreenProps> = ({ players, updatePlayers, onExit 
   const [transfer, setTransfer] = useState<TransferState>({ fromId: '', toId: '', amount: 0 });
   const [confirmTransfer, setConfirmTransfer] = useState(false);
   const [transferError, setTransferError] = useState<string | null>(null);
+
+  const [managingPlayerId, setManagingPlayerId] = useState<string | null>(null);
+  const [manualAmount, setManualAmount] = useState(0);
+
+  const managingPlayer = players.find(p => p.id === managingPlayerId) || null;
+
+  const adjustManagedBalance = (delta: number) => {
+    if (!managingPlayerId || manualAmount <= 0) return;
+    updatePlayers(players.map(p =>
+      p.id === managingPlayerId ? { ...p, balance: p.balance + delta * manualAmount } : p
+    ));
+    setManualAmount(0);
+  };
+
+  const removeManagedProperty = (index: number) => {
+    if (!managingPlayerId) return;
+    updatePlayers(players.map(p =>
+      p.id === managingPlayerId
+        ? { ...p, properties: p.properties.filter((_, i) => i !== index) }
+        : p
+    ));
+  };
 
   const handleScanComplete = (result: ScanResult) => {
     if (activeScannerFor) {
@@ -154,7 +176,10 @@ const GameScreen: React.FC<GameScreenProps> = ({ players, updatePlayers, onExit 
                   <Scan className="w-5 h-5 stroke-[3]" />
                   AI SCAN
                 </button>
-                <button className="flex items-center justify-center gap-2 py-4 bg-white text-black btn-monopoly font-black uppercase tracking-tighter">
+                <button
+                  onClick={() => { setManagingPlayerId(player.id); setManualAmount(0); }}
+                  className="flex items-center justify-center gap-2 py-4 bg-white text-black btn-monopoly font-black uppercase tracking-tighter"
+                >
                   MANAGE
                   <ChevronRight className="w-5 h-5 stroke-[3]" />
                 </button>
@@ -293,6 +318,71 @@ const GameScreen: React.FC<GameScreenProps> = ({ players, updatePlayers, onExit 
               >
                 GO BACK
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manage Player Modal */}
+      {managingPlayer && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm">
+          <div className="bg-white border-4 border-black shadow-[12px_12px_0px_0px_rgba(0,0,0,0.5)] w-full max-w-sm overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="p-6 border-b-4 border-black bg-slate-50 flex items-center justify-between shrink-0">
+              <h2 className="text-2xl font-black tracking-tighter italic">MANAGE {managingPlayer.name.toUpperCase()}</h2>
+              <button onClick={() => setManagingPlayerId(null)} className="text-black p-1">
+                <X className="w-8 h-8 stroke-[3]" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6 overflow-y-auto">
+              <div>
+                <label className="text-[10px] font-black text-black uppercase mb-2 block tracking-widest">ADJUST BALANCE</label>
+                <div className="relative mb-3">
+                  <span className="absolute left-5 top-1/2 -translate-y-1/2 text-green-600 font-black text-2xl">$</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    className="w-full bg-white border-4 border-black p-5 pl-12 font-black text-3xl text-black outline-none placeholder:text-slate-200"
+                    placeholder="0"
+                    value={manualAmount || ''}
+                    onChange={(e) => setManualAmount(parseInt(e.target.value) || 0)}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <button
+                    onClick={() => adjustManagedBalance(1)}
+                    className="flex items-center justify-center gap-2 py-4 bg-[#1FB25A] text-white btn-monopoly font-black uppercase tracking-tighter"
+                  >
+                    <Plus className="w-5 h-5 stroke-[3]" /> ADD
+                  </button>
+                  <button
+                    onClick={() => adjustManagedBalance(-1)}
+                    className="flex items-center justify-center gap-2 py-4 bg-[#E21B22] text-white btn-monopoly font-black uppercase tracking-tighter"
+                  >
+                    <Minus className="w-5 h-5 stroke-[3]" /> SUBTRACT
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-black uppercase mb-2 block tracking-widest">
+                  PROPERTIES ({managingPlayer.properties.length})
+                </label>
+                {managingPlayer.properties.length > 0 ? (
+                  <div className="space-y-2">
+                    {managingPlayer.properties.map((prop, i) => (
+                      <div key={i} className="flex items-center justify-between bg-slate-50 border-2 border-black px-4 py-3">
+                        <span className="font-black text-sm uppercase tracking-tight">{prop.name}</span>
+                        <button onClick={() => removeManagedProperty(i)} className="text-red-600 p-1">
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[10px] text-slate-400 font-black uppercase italic">No properties owned</p>
+                )}
+              </div>
             </div>
           </div>
         </div>

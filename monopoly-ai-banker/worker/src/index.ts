@@ -53,9 +53,19 @@ const RESPONSE_SCHEMA = {
   required: ["detectedMoney", "detectedProperties", "totalValue"],
 };
 
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "https://franceschiindustries.com",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "content-type",
+};
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+
+    if (request.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: CORS_HEADERS });
+    }
 
     if (url.pathname === "/") {
       return json({ status: "ok" });
@@ -119,13 +129,15 @@ export default {
       return json({ error: "no response from AI" }, 502);
     }
 
-    return new Response(resultText, { headers: { "content-type": "application/json" } });
+    return new Response(resultText, {
+      headers: { "content-type": "application/json", ...CORS_HEADERS },
+    });
   },
 };
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...CORS_HEADERS },
   });
 }
