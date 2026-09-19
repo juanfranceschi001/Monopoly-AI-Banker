@@ -66,7 +66,9 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete, onClose }) => {
 
     try {
       const base64String = await resizeImageToBase64(file);
+      console.log("Scanner: resized image base64 length=" + base64String.length);
       const result = await analyzeMonopolyImage(base64String);
+      console.log("Scanner: result=" + JSON.stringify(result));
       onScanComplete(result);
     } catch (e) {
       console.error("Scanner: analysis failed.", e);

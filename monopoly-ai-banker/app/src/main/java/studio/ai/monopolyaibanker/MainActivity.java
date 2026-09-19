@@ -47,6 +47,7 @@ public class MainActivity extends Activity {
     private Uri cameraPhotoUri;
     private WebView webView;
     private boolean hasResumedBefore;
+    private boolean skipNextReload;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -152,6 +153,12 @@ public class MainActivity extends Activity {
         if (cameraReady) {
             chooserIntent.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[]{takePictureIntent});
         }
+        // Backgrounding for our own camera/gallery chooser shouldn't trigger
+        // the resume-reload below -- that would tear down the in-progress
+        // scan (and its pending fetch to Gemini) the instant the picker
+        // returns, discarding it silently with the page reset back to the
+        // dashboard.
+        skipNextReload = true;
         startActivityForResult(chooserIntent, REQUEST_FILE_CHOOSER);
     }
 
@@ -243,9 +250,10 @@ public class MainActivity extends Activity {
         // only fetch that ever happens otherwise. Reload so a fix shipped
         // to the hosted site takes effect without the user needing to
         // force-stop the app first.
-        if (hasResumedBefore) {
+        if (hasResumedBefore && !skipNextReload) {
             webView.reload();
         }
+        skipNextReload = false;
         hasResumedBefore = true;
     }
 }

@@ -1,8 +1,18 @@
 
 import React, { useState } from 'react';
-import { DollarSign, Scan, Settings, History, ChevronRight, ArrowRightLeft, X, AlertCircle, Building2, CheckCircle2, Trash2, Plus, Minus } from 'lucide-react';
-import { Player, ScanResult } from '../types';
+import { DollarSign, Scan, Settings, History, ChevronRight, ArrowRightLeft, X, AlertCircle, Building2, CheckCircle2, Trash2, Plus, Minus, Calculator } from 'lucide-react';
+import { Player, Property, ScanResult } from '../types';
 import Scanner from './Scanner';
+
+const HOTEL_VALUE_STORAGE_KEY = 'monopoly_ai_hotel_value';
+
+const calculatePlayerTotal = (player: Player, hotelValue: number): number => {
+  const propertyValue = player.properties.reduce(
+    (sum, prop) => sum + (prop.cost || 0) + (prop.hotels || 0) * hotelValue,
+    0
+  );
+  return player.balance + propertyValue;
+};
 
 interface GameScreenProps {
   players: Player[];
@@ -28,7 +38,33 @@ const GameScreen: React.FC<GameScreenProps> = ({ players, updatePlayers, onExit 
   const [managingPlayerId, setManagingPlayerId] = useState<string | null>(null);
   const [manualAmount, setManualAmount] = useState(0);
 
+  const [showGrandTotal, setShowGrandTotal] = useState(false);
+  const [hotelValue, setHotelValue] = useState<number>(() => {
+    const saved = localStorage.getItem(HOTEL_VALUE_STORAGE_KEY);
+    return saved ? parseInt(saved, 10) || 0 : 0;
+  });
+
   const managingPlayer = players.find(p => p.id === managingPlayerId) || null;
+
+  const updateHotelValue = (value: number) => {
+    setHotelValue(value);
+    localStorage.setItem(HOTEL_VALUE_STORAGE_KEY, String(value));
+  };
+
+  const updatePropertyField = (playerId: string, propIndex: number, field: keyof Pick<Property, 'cost' | 'hotels'>, value: number) => {
+    updatePlayers(players.map(p =>
+      p.id === playerId
+        ? {
+            ...p,
+            properties: p.properties.map((prop, i) =>
+              i === propIndex ? { ...prop, [field]: Math.max(0, value) } : prop
+            ),
+          }
+        : p
+    ));
+  };
+
+  const grandTotal = players.reduce((sum, p) => sum + calculatePlayerTotal(p, hotelValue), 0);
 
   const adjustManagedBalance = (delta: number) => {
     if (!managingPlayerId || manualAmount <= 0) return;
@@ -127,6 +163,12 @@ const GameScreen: React.FC<GameScreenProps> = ({ players, updatePlayers, onExit 
             </div>
           </div>
           <div className="flex gap-3">
+            <button
+              onClick={() => setShowGrandTotal(true)}
+              className="p-2 border-2 border-black bg-slate-50 hover:bg-slate-100 transition-colors shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
+            >
+              <Calculator className="w-6 h-6" />
+            </button>
             <button className="p-2 border-2 border-black bg-slate-50 hover:bg-slate-100 transition-colors shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none">
               <History className="w-6 h-6" />
             </button>
@@ -382,6 +424,102 @@ const GameScreen: React.FC<GameScreenProps> = ({ players, updatePlayers, onExit 
                 ) : (
                   <p className="text-[10px] text-slate-400 font-black uppercase italic">No properties owned</p>
                 )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Grand Total Modal */}
+      {showGrandTotal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm">
+          <div className="bg-white border-4 border-black shadow-[12px_12px_0px_0px_rgba(0,0,0,0.5)] w-full max-w-sm overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="p-6 border-b-4 border-black bg-slate-50 flex items-center justify-between shrink-0">
+              <h2 className="text-2xl font-black tracking-tighter italic">GRAND TOTAL</h2>
+              <button onClick={() => setShowGrandTotal(false)} className="text-black p-1">
+                <X className="w-8 h-8 stroke-[3]" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6 overflow-y-auto">
+              <div>
+                <label className="text-[10px] font-black text-black uppercase mb-2 block tracking-widest">$ PER HOTEL</label>
+                <div className="relative">
+                  <span className="absolute left-5 top-1/2 -translate-y-1/2 text-green-600 font-black text-2xl">$</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    className="w-full bg-white border-4 border-black p-4 pl-12 font-black text-2xl text-black outline-none placeholder:text-slate-200"
+                    placeholder="0"
+                    value={hotelValue || ''}
+                    onChange={(e) => updateHotelValue(parseInt(e.target.value) || 0)}
+                  />
+                </div>
+              </div>
+
+              {players.map((player) => (
+                <div key={player.id} className="border-2 border-black">
+                  <div className={`px-4 py-2 flex items-center justify-between ${player.color} border-b-2 border-black`}>
+                    <span className="font-black text-white uppercase tracking-tight text-sm">{player.name}</span>
+                    <span className="font-black text-white text-lg">${calculatePlayerTotal(player, hotelValue).toLocaleString()}</span>
+                  </div>
+                  <div className="p-3 space-y-2 bg-slate-50">
+                    <div className="flex items-center justify-between text-xs font-black uppercase tracking-widest text-slate-500">
+                      <span>Cash Balance</span>
+                      <span className="text-black">${player.balance.toLocaleString()}</span>
+                    </div>
+                    {player.properties.length > 0 ? (
+                      player.properties.map((prop, i) => (
+                        <div key={i} className="bg-white border-2 border-black p-3 space-y-2">
+                          <span className="font-black text-xs uppercase tracking-tight block">{prop.name}</span>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Value</label>
+                              <div className="relative">
+                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-green-600 font-black text-sm">$</span>
+                                <input
+                                  type="number"
+                                  inputMode="numeric"
+                                  className="w-full bg-slate-50 border-2 border-black p-2 pl-5 font-black text-sm text-black outline-none"
+                                  value={prop.cost || ''}
+                                  placeholder="0"
+                                  onChange={(e) => updatePropertyField(player.id, i, 'cost', parseInt(e.target.value) || 0)}
+                                />
+                              </div>
+                            </div>
+                            <div>
+                              <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Hotels</label>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => updatePropertyField(player.id, i, 'hotels', (prop.hotels || 0) - 1)}
+                                  className="p-2 border-2 border-black bg-[#E21B22] text-white shrink-0"
+                                >
+                                  <Minus className="w-3 h-3 stroke-[3]" />
+                                </button>
+                                <span className="flex-1 text-center font-black text-sm">{prop.hotels || 0}</span>
+                                <button
+                                  onClick={() => updatePropertyField(player.id, i, 'hotels', (prop.hotels || 0) + 1)}
+                                  className="p-2 border-2 border-black bg-[#1FB25A] text-white shrink-0"
+                                >
+                                  <Plus className="w-3 h-3 stroke-[3]" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-[10px] text-slate-400 font-black uppercase italic">No properties owned</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="p-6 bg-[#FFEC00] border-t-4 border-black shrink-0">
+              <div className="flex items-center justify-between">
+                <span className="font-black text-black uppercase tracking-tighter text-lg">Grand Total</span>
+                <span className="font-black text-black text-3xl tracking-tighter">${grandTotal.toLocaleString()}</span>
               </div>
             </div>
           </div>

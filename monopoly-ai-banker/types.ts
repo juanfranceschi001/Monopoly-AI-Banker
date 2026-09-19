@@ -3,6 +3,7 @@ export interface Property {
   name: string;
   colorGroup?: string;
   cost: number;
+  hotels?: number;
 }
 
 export interface Player {
