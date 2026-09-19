@@ -9,6 +9,45 @@ interface ScannerProps {
   onClose: () => void;
 }
 
+// Camera photos can be 8-15MB at full resolution -- base64-encoding,
+// uploading, and having Gemini process that is slow and unnecessary for
+// reading bills/cards. Downscale to a reasonable size first.
+const MAX_DIMENSION = 1280;
+const JPEG_QUALITY = 0.85;
+
+const resizeImageToBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      let { width, height } = img;
+      if (width > height && width > MAX_DIMENSION) {
+        height = Math.round((height * MAX_DIMENSION) / width);
+        width = MAX_DIMENSION;
+      } else if (height > MAX_DIMENSION) {
+        width = Math.round((width * MAX_DIMENSION) / height);
+        height = MAX_DIMENSION;
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Canvas 2D context unavailable'));
+        return;
+      }
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', JPEG_QUALITY).split(',')[1]);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('Failed to load photo for resizing'));
+    };
+    img.src = objectUrl;
+  });
+};
+
 const Scanner: React.FC<ScannerProps> = ({ onScanComplete, onClose }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,24 +64,15 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete, onClose }) => {
     setLoading(true);
     setError(null);
 
-    const reader = new FileReader();
-    reader.onerror = () => {
-      console.error("Scanner: FileReader failed to read the selected photo.", reader.error);
-      setError("Could not read that photo. Please try again.");
+    try {
+      const base64String = await resizeImageToBase64(file);
+      const result = await analyzeMonopolyImage(base64String);
+      onScanComplete(result);
+    } catch (e) {
+      console.error("Scanner: analysis failed.", e);
+      setError("Failed to analyze image. Please try again with a clearer photo.");
       setLoading(false);
-    };
-    reader.onloadend = async () => {
-      try {
-        const base64String = (reader.result as string).split(',')[1];
-        const result = await analyzeMonopolyImage(base64String);
-        onScanComplete(result);
-      } catch (e) {
-        console.error("Scanner: analysis failed.", e);
-        setError("Failed to analyze image. Please try again with a clearer photo.");
-        setLoading(false);
-      }
-    };
-    reader.readAsDataURL(file);
+    }
   };
 
   return (
