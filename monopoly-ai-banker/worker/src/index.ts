@@ -97,6 +97,8 @@ export default {
       return json({ error: "missing image" }, 400);
     }
 
+    console.log(`analyze request: base64 length=${image.length}`);
+
     const upstream = await fetch(`${GEMINI_URL}?key=${env.GEMINI_API_KEY}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -118,6 +120,7 @@ export default {
 
     if (!upstream.ok) {
       const errorBody = await upstream.text();
+      console.error(`Gemini upstream error ${upstream.status}: ${errorBody}`);
       return json({ error: "upstream error", detail: errorBody }, 502);
     }
 

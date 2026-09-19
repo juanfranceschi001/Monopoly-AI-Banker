@@ -69,6 +69,10 @@ public class MainActivity extends Activity {
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
         settings.setMediaPlaybackRequiresUserGesture(false);
+        // The web app is updated independently of app releases (hosted on
+        // franceschiindustries.com); always revalidate so a fix shipped
+        // there doesn't get stuck behind a stale cached index.html.
+        settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
 
         webView.setWebViewClient(new WebViewClient());
         webView.setWebChromeClient(new WebChromeClient() {

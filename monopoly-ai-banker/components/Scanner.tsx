@@ -70,7 +70,12 @@ const Scanner: React.FC<ScannerProps> = ({ onScanComplete, onClose }) => {
       onScanComplete(result);
     } catch (e) {
       console.error("Scanner: analysis failed.", e);
-      setError("Failed to analyze image. Please try again with a clearer photo.");
+      const message = e instanceof Error ? e.message : "";
+      setError(
+        message.includes("busy right now")
+          ? message
+          : "Failed to analyze image. Please try again with a clearer photo."
+      );
       setLoading(false);
     }
   };
